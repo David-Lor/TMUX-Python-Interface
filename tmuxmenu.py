@@ -3,7 +3,7 @@
 
 import subprocess, os, atexit
 from getch import getch
-from time import sleep #Temporal
+from time import sleep
 
 ARROW_HEADER = "\x1b"
 ARROW_LEFT = "[D"
@@ -45,8 +45,7 @@ def mainmenu():
 			break
 	
 	if seleccion == 0:
-		print("\n\nAbrir TMUX")
-		exit()
+		submenu_choosetmux()
 	elif seleccion == 1:
 		submenu_newtmux()
 	elif seleccion == 2:
@@ -64,7 +63,58 @@ def submenu_newtmux():
 	mainmenu()
 
 
-def render(titulo, opciones, textuales, seleccion):
+def submenu_choosetmux():
+	"""Selección de uno de los tmux disponibles en el sistema para su apertura
+	Devuelve:
+	(to-do)"""
+	try:
+		clr()
+		o = subprocess.check_output(["tmux", "ls"]).splitlines()
+	
+	except: #Sin tmuxes
+		clr()
+		print("¡No hay tmuxes disponibles!")
+		sleep(1.5)
+		
+	else: #Con tmuxes
+		o = [ s.split(b': ')[0].decode("utf-8") for s in o ]
+		textuales = [ str(x) for x in range( len(o) ) ]
+		o.append("Volver")
+		textuales.append("q")
+		seleccion = 0
+
+		while True:
+			render(
+				titulo = "** Hay %s Tmuxes abiertos**" % len(o),
+				opciones = o,
+				textuales = textuales,
+				seleccion = seleccion,
+				textual_izq = True
+			)
+			
+			seleccionado = False
+			while seleccionado == False:
+				seleccionado = seleccionar(
+					opciones = o,
+					textuales = textuales,
+					seleccion = seleccion
+				)
+			
+			if isinstance(seleccionado, list): #Cambio de opción o selección con textual
+				seleccion = seleccionado[1]
+				if seleccionado[0] == True: #Seleccionada opción con textual
+					break
+			elif seleccionado == True:
+				break
+		if not seleccion == (len(o) - 1):
+			subprocess.call( [ "tmux", "attach", "-t", o[seleccion] ] )
+
+	finally:
+		mainmenu() #Volver al menú principal
+
+
+
+def render(titulo, opciones, textuales, seleccion, textual_izq=False):
 	"""Imprime la lista asignada y actualiza pantalla"""
 	clr()
 	print(titulo)
@@ -73,7 +123,10 @@ def render(titulo, opciones, textuales, seleccion):
 		index = opciones.index(o)
 		if seleccion == index:
 			ast = ">> "
-		print( "{}{} [{}]".format(ast, o, textuales[index]) )
+		if textual_izq:
+			print( "{}[{}] {}".format(ast, textuales[index], o) )
+		else:
+			print( "{}{} [{}]".format(ast, o, textuales[index]) )
 
 
 def seleccionar(opciones, textuales, seleccion):
