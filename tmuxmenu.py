@@ -27,46 +27,67 @@ def mainmenu():
 	opciones = [
 		"Abrir un tmux en ejecución", #0
 		"Crear nuevo tmux", #1
-		"Enviar comandos a tmux en ejecución", #2
-		"Salir" #3
+		"Matar un tmux en ejecución", #2
+		"Enviar comandos a tmux en ejecución", #3
+		"Salir" #4
 	]
-	opciones_letras = ['a', 'c', 'e', 'q']
-	seleccion = 0
-	while True:
-		seleccionado = False
-		render(titulo, opciones, opciones_letras, seleccion)
-		while seleccionado == False: #Reejecutar si se pulsa cualquier otra cosa
-			seleccionado = seleccionar(opciones, opciones_letras, seleccion)
-		if isinstance(seleccionado, list): #Cambio de opción o selección con textual
-			seleccion = seleccionado[1]
-			if seleccionado[0] == True: #Seleccionada opción con textual
-				break
-		elif seleccionado == True: #Enter sobre opción
-			break
+	opciones_letras = ['a', 'c', 'k', 'e', 'q']
 	
-	if seleccion == 0:
-		submenu_choosetmux()
-	elif seleccion == 1:
-		submenu_newtmux()
-	elif seleccion == 2:
-		print("\n\nEnviar TMUX")
-		exit()
-	elif seleccion == 3:
-		exit()
+	while True:
+		seleccion = 0
+		while True:
+			seleccionado = False
+			render(titulo, opciones, opciones_letras, seleccion)
+			while seleccionado == False: #Reejecutar si se pulsa cualquier otra cosa
+				seleccionado = seleccionar(opciones, opciones_letras, seleccion)
+			if isinstance(seleccionado, list): #Cambio de opción o selección con textual
+				seleccion = seleccionado[1]
+				if seleccionado[0] == True: #Seleccionada opción con textual
+					break
+			elif seleccionado == True: #Enter sobre opción
+				break
+		
+		if seleccion == 0: #Elegir tmux
+			submenu_opentmux()
+		elif seleccion == 1: #Nuevo tmux
+			submenu_newtmux()
+		elif seleccion == 2: #Matar tmux
+			submenu_killtmux()
+		elif seleccion == 3: #Enviar comando a tmux
+			submenu_sendtmux()
+		elif seleccion == 4: #Salir
+			exit()
 
 
 def submenu_newtmux():
 	"""Creación de nuevo tmux con nombre personalizado"""
 	clr()
-	tmuxname = input("Introduce nombre para el nuevo tmux: ")
-	subprocess.call(["tmux","new","-s",tmuxname])
-	mainmenu()
+	tm = input("Introduce nombre para el nuevo tmux: ")
+	subprocess.call(["tmux","new","-s",tm])
 
+def submenu_opentmux():
+	tm = choosetmux()
+	if tm == False:
+		return
+	subprocess.call( ["tmux", "attach", "-t", tm] )
 
-def submenu_choosetmux():
-	"""Selección de uno de los tmux disponibles en el sistema para su apertura
-	Devuelve:
-	(to-do)"""
+def submenu_killtmux():
+	tm = choosetmux()
+	if tm == False:
+		return
+	subprocess.call( ["tmux", "kill-pane", "-t", tm] )
+
+def submenu_sendtmux():
+	tm = choosetmux()
+	if tm == False:
+		return
+	clr()
+	order = input("Introduce orden que enviar al tmux '%s': " % tm)
+	subprocess.call( ["tmux", "send", "-t", tm, order, "ENTER"] )
+
+def choosetmux():
+	"""Selección de uno de los tmux disponibles en el sistema
+	Devuelve el nombre del tmux seleccionado, o False si no se seleccionó ninguno o no hay tmuxes disponibles"""
 	try:
 		clr()
 		o = subprocess.check_output(["tmux", "ls"]).splitlines()
@@ -75,6 +96,7 @@ def submenu_choosetmux():
 		clr()
 		print("¡No hay tmuxes disponibles!")
 		sleep(1.5)
+		return False
 		
 	else: #Con tmuxes
 		o = [ s.split(b': ')[0].decode("utf-8") for s in o ]
@@ -85,7 +107,7 @@ def submenu_choosetmux():
 
 		while True:
 			render(
-				titulo = "** Hay %s Tmuxes abiertos**" % len(o),
+				titulo = "** Hay {} Tmuxes abiertos**".format(len(o)-1),
 				opciones = o,
 				textuales = textuales,
 				seleccion = seleccion,
@@ -106,11 +128,10 @@ def submenu_choosetmux():
 					break
 			elif seleccionado == True:
 				break
-		if not seleccion == (len(o) - 1):
-			subprocess.call( [ "tmux", "attach", "-t", o[seleccion] ] )
-
-	finally:
-		mainmenu() #Volver al menú principal
+		if seleccion == (len(o) - 1):
+			return False
+		else:
+			return o[seleccion]
 
 
 
