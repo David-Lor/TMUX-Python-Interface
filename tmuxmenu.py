@@ -85,9 +85,11 @@ def submenu_sendtmux():
 	order = input("Introduce orden que enviar al tmux '%s': " % tm)
 	subprocess.call( ["tmux", "send", "-t", tm, order, "ENTER"] )
 
+tmux_seleccionado = 0
 def choosetmux():
 	"""Selección de uno de los tmux disponibles en el sistema
 	Devuelve el nombre del tmux seleccionado, o False si no se seleccionó ninguno o no hay tmuxes disponibles"""
+	global tmux_seleccionado
 	try:
 		clr()
 		o = subprocess.check_output(["tmux", "ls"]).splitlines()
@@ -103,14 +105,13 @@ def choosetmux():
 		textuales = [ str(x) for x in range( len(o) ) ]
 		o.append("Volver")
 		textuales.append("q")
-		seleccion = 0
 
 		while True:
 			render(
 				titulo = "** Hay {} Tmuxes abiertos**".format(len(o)-1),
 				opciones = o,
 				textuales = textuales,
-				seleccion = seleccion,
+				seleccion = tmux_seleccionado,
 				textual_izq = True
 			)
 			
@@ -119,19 +120,20 @@ def choosetmux():
 				seleccionado = seleccionar(
 					opciones = o,
 					textuales = textuales,
-					seleccion = seleccion
+					seleccion = tmux_seleccionado
 				)
 			
 			if isinstance(seleccionado, list): #Cambio de opción o selección con textual
-				seleccion = seleccionado[1]
+				tmux_seleccionado = seleccionado[1]
 				if seleccionado[0] == True: #Seleccionada opción con textual
 					break
 			elif seleccionado == True:
 				break
-		if seleccion == (len(o) - 1):
+		if tmux_seleccionado == (len(o) - 1):
+			tmux_seleccionado = 0
 			return False
 		else:
-			return o[seleccion]
+			return o[tmux_seleccionado]
 
 
 
