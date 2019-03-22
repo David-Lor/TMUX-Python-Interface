@@ -1,100 +1,139 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 
-import subprocess
+from bullet import Bullet
+from datetime import datetime
+from collections import OrderedDict
+from typing import Dict, Optional
+from subprocess import check_output, call, CalledProcessError, DEVNULL
 
-def chooseoption():
-    print("Selecciona una opción y pulsa Enter:")
-    print("[a] [1] - Abrir un tmux en ejecución")
-    print("[c] [2] - Crear nuevo tmux")
-    print("[e] [3] - Enviar comando a un tmux en ejecución")
-    print("[q] [0] - Salir")
-    validopt = ['a','c','e','q','0','1','2','3']
-    opt = raw_input() #lee string + enter
-    if validopt.__contains__(opt):
-        return opt
+
+###
+# HELPERS, SUBPROCESS CALLS
+###
+
+def clear():
+    call("clear")
+
+
+def get_running_tmuxes() -> Dict[str, datetime]:
+    tmuxes = dict()
+    try:
+        output: str = check_output(
+            ["tmux", "list-sessions", "-F", "#{session_name}__separator__#{session_created}"],
+            stderr=DEVNULL
+        ).decode()
+    except CalledProcessError:
+        pass
     else:
-        clearscreen()
-        print("Orden no entendida")
-        return 0
+        for line in output.splitlines():
+            if line:
+                name, epoch = line.split("__separator__")
+                tmuxes[name] = datetime.fromtimestamp(int(epoch))
+    return tmuxes
 
-def list_tmux(): #función para listar los tmux en ejecución y seleccionar uno. Compatible con varias funciones. Devuelve un string con el nombre del tmux seleccionado.
+
+def attach_tmux(tmux: str):
+    call(["tmux", "attach", "-t", tmux])
+
+
+def kill_tmux(tmux: str):
+    call(["tmux", "kill-session", "-t", tmux])
+
+
+def run_command_in_tmux(tmux: str, command: str):
+    call(["tmux", "send", "-t", tmux, command, "ENTER"])
+
+###
+# OPTIONS (SUBMENUS)
+###
+
+
+def choose_tmux(tmuxes: Dict[str, datetime]) -> Optional[str]:
+    options = OrderedDict(
+        (name, "{} ({})".format(name, dt.strftime("%d/%m %H:%M:%S")))
+        for name, dt
+        in sorted(list(tmuxes.items()), key=lambda kv: kv[1], reverse=True)
+    )
+    options[None] = "Volver"
+    cli = Bullet(
+        prompt="\nSelecciona un tmux:",
+        choices=list(options.values())
+    )
+    selected = cli.launch()
+    return next(key for key in options.keys() if options[key] == selected)
+
+
+def option_open_running_tmux():
+    selection = choose_tmux(get_running_tmuxes())
+    if selection:
+        attach_tmux(selection)
+    clear()
+
+
+def option_create_new_tmux():
     try:
-        print("Listado de tmuxes abiertos: selecciona uno:")
-        output = str( subprocess.check_output(["tmux","ls"]) )
-        splitout = output.split("\n")
-        n = len(splitout)
-        linenames = list()
-        for i in range(n-1):
-            line = splitout[i]
-            linename = splitout[i].split(": ")
-            linenames.append(linename[0])
-            print( "[" + str(i) + "] Nombre: " + linename[0] + " | " + linename[1] )
-        op = raw_input()
+        name = input("Nombre para el nuevo tmux (vacío para valor por defecto): ")
+    except (KeyboardInterrupt, InterruptedError):
+        pass
+    else:
+        if name:
+            call(["tmux", "new", "-s", name])
+        else:
+            call(["tmux", "new"])
+    clear()
+
+
+def option_run_command_in_tmux():
+    selection = choose_tmux(get_running_tmuxes())
+    if selection:
+        clear()
+        command = input("Introduce el comando a ejecutar (vacío para cancelar): ")
+        if command:
+            run_command_in_tmux(selection, command)
+    clear()
+
+
+def option_kill_tmux():
+    selection = choose_tmux(get_running_tmuxes())
+    if selection:
+        kill_tmux(selection)
+    clear()
+
+
+def option_exit():
+    exit(0)
+
+
+###
+# MAIN MENU
+###
+
+def main():
+    running_tmuxes = len(get_running_tmuxes())
+    options = OrderedDict()
+    if running_tmuxes > 0:
+        options["Abrir un tmux en ejecución"] = option_open_running_tmux
+        options["Ejecutar comando en un tmux"] = option_run_command_in_tmux
+        options["Matar un tmux"] = option_kill_tmux
+    options["Crear un nuevo tmux"] = option_create_new_tmux
+    options["Salir"] = option_exit
+    cli = Bullet(
+        prompt="\nHay {} tmuxes en ejecución.\nSelecciona una acción:".format(running_tmuxes),
+        choices=list(options.keys())
+    )
+    select = cli.launch()
+    clear()
+    options[select]()
+
+
+###
+# MAIN
+###
+
+if __name__ == "__main__":
+    while True:
         try:
-            opindex = int(op)
-            if (not opindex > n) and (not opindex < 0):
-                return str(linenames[opindex]) #el P.P. se encarga de ejecutar la siguiente función
-            else: #si se introduce un valor fuera de rango
-                clearscreen()
-                print("Opción no válida (fuera de rango)")
-                st = list_tmux() #rellamada a la función y capturar el valor para return
-                return st
-        except: #si se introduce un valor inválido
-            clearscreen()
-            print("Opción no válida (valor inválido)")
-            st = list_tmux() #rellamada a la función y capturar el valor para return
-            return st
-    except: #si no hay tmuxes abiertos, la ejecución anterior dará error, saltando a este punto.
-        clearscreen()
-        print("No hay tmuxes abiertos.")
-        return 0 #devolver un 0, que indica que no hay tmuxes abiertos
-
-def open_tmux(dest): #hay que pasarle un tmux (nombre del tmux en str), previamente escogido con la función list_tmux
-    print ( "Seleccionado el tmux " + dest )
-    subprocess.call(["tmux","attach","-t",dest])
-    return
-
-def execute_in_tmux(dest): #ejecuta un comando en un tmux en ejecución, previamente escogido co la función list_tmux
-    print ( "Seleccionado el tmux " + dest )
-    print("Escribe el comando que deseas ejecutar:")
-    try:
-        comm = str( raw_input() )
-        subprocess.call(["tmux","send","-t",dest,comm,"ENTER"])
-        print ("Lanzado con éxito el comando " + comm + " en el tmux " + dest )
-        return
-    except: #si hubo algún error al leer el comando
-        clearscreen()
-        print("Error al leer el comando introducido.")
-        return
-
-def create_tmux():
-    print("Crear nuevo tmux: introduce un nombre para este tmux:")
-    tmuxname = raw_input()
-    print ( "Creado el nuevo tmux llamado: " + str(tmuxname) )
-    subprocess.call(["tmux","new","-s",tmuxname])
-    return
-
-def clearscreen():
-    subprocess.call("clear")
-    return
-
-while True:
-    print("*-. HERRAMIENTA TMUX .-*")
-    opt = chooseoption()
-    error = False
-    if not opt == 0: #si NO se return un 0 al elegir opción, se seleccionó una opción correcta
-        if opt == "a" or opt == "1":
-            tm = list_tmux()
-            if not tm == 0: open_tmux(tm) #saltar al siguiente punto sólo si hay tmuxes disponibles.
-            else: error = True #usar el bool error para evitar que se limpie la pantalla
-        elif opt == "c" or opt == "2":
-            create_tmux()
-        elif opt == "e" or opt == "3":
-            tm = list_tmux()
-            if not tm == 0: execute_in_tmux(tm) #saltar al siguiente punto sólo si hay tmuxes disponibles.
-            else: error = True #usar el bool error para evitar que se limpie la pantalla
-        elif opt == "q" or opt == "0":
-            print("Adiós!")
-            break
-        if not error: clearscreen() #limpiar la pantalla si todo fue bien. En caso de errores, la orden de limpiar pantalla se debe aplicar en las propias funciones! en caso de que las funciones devuelvan 0 (habiendo pasado sin problemas el paso de seleccionar opción) se debe usar el bool "error = True" para que no se limpie la pantalla en este punto (por ejemplo, si el error = no hay tmuxes disponibles)
+            main()
+        except (KeyboardInterrupt, InterruptedError):
+            clear()
+            option_exit()
