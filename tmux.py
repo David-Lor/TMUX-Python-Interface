@@ -109,6 +109,7 @@ def option_exit():
 ###
 
 def main():
+    clear()
     running_tmuxes = len(get_running_tmuxes())
     options = OrderedDict()
     if running_tmuxes > 0:
